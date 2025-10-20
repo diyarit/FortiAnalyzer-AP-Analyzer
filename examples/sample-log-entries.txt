@@ -1,0 +1,77 @@
+# Sample FortiAnalyzer Wireless Log Entries
+
+This file contains sanitized sample log entries that demonstrate the format expected by the FortiAnalyzer AP Analyzer tool.
+
+## AP Reboot Event (remotewtptime=0.0)
+```
+date=2025-10-20 time=04:52:19 id=7563270480073851009 itime="2025-10-20 06:52:19" logver=704062726 logid=0104043573 type="event" subtype="wireless" level="notice" srcip=10.12.55.15 action="client-authentication" msg="Client aa:bb:cc:dd:ee:ff authenticated." logdesc="Wireless client authenticated" sn="FP221ETF18099DP4" user="DOMAIN\\user.name" group="RADIUS-01" reason="Reserved 0" ssid="Corporate" ap="AP-01" vap="Corporate WiFi" security="WPA2 Enterprise" channel=11 signal=-45 radioid=1 radioband="802.11n,g-only" stamac="aa:bb:cc:dd:ee:ff" encryption="AES" mpsk="N/A" eventtime=1760961135243779647 authserver="RADIUS-01" remotewtptime="0.0" tz="-0700" snr=50 devid="FGT60E4Q16074290" vd="root" dtime="2025-10-20 04:52:19" itime_t=1760961134 devname="FW-01"
+```
+
+## Low Uptime Event (Recent Reboot)
+```
+date=2025-10-20 time=04:52:27 id=7563270531613458556 itime="2025-10-20 06:52:26" logver=704062726 logid=0104043673 type="event" subtype="wireless" level="warning" action="DNS-no-domain" msg="DNS lookup of wpad.company.local from client aa:bb:cc:dd:ee:ff failed with \"non-existing domain\"" logdesc="Wireless station DNS process failed due to non-existing domain" sn="FP221ETF18099DP4" reason="Server 10.1.20.4 replied \"non-existing domain\"" server="10.1.20.4" ssid="Corporate" ap="AP-01" vap="Corporate WiFi" security="WPA2 Enterprise" stamac="aa:bb:cc:dd:ee:ff" encryption="AES" eventtime=1760961147237340224 remotewtptime="9.741713" tz="-0700" devid="FGT60E4Q16074290" vd="root" dtime="2025-10-20 04:52:27" itime_t=1760961146 devname="FW-01"
+```
+
+## Frame Failure Event
+```
+date=2025-10-20 time=05:15:12 id=7563276398833751795 itime="2025-10-20 07:15:12" logver=704062726 logid=0104043581 type="event" subtype="wireless" level="notice" srcip=10.12.50.53 action="client-disconnected-by-wtp" msg="Client aa:bb:cc:dd:ee:ff disconnected by WTP." logdesc="Wireless client WTP disconnected" sn="FP221ETF18099DP4" user="N/A" group="N/A" reason="Disassociated because excessive number of frames need to be acknowledged, but are not acknowledged due to AP transmissions and/or poor channel conditions" ssid="Corporate" ap="AP-01" vap="Corporate WiFi" security="WPA2 Personal" channel=60 signal=-59 radioid=2 radioband="802.11ac (5G)" stamac="aa:bb:cc:dd:ee:ff" encryption="AES" mpsk="N/A" eventtime=1760962512388897046 authserver="N/A" remotewtptime="1375.295283" tz="-0700" snr=36 devid="FGT60E4Q16074290" vd="root" dtime="2025-10-20 05:15:12" itime_t=1760962513 devname="FW-01"
+```
+
+## Infrastructure Event - Power Change
+```
+date=2025-10-18 time=21:18:26 id=7562945123456789012 itime="2025-10-18 23:18:26" logver=704062726 logid=0104043590 type="event" subtype="wireless" level="info" action="power-change" msg="AP AP-01 radio 2 oper txpower is changed to 29 dBm." logdesc="AP power level changed" sn="FP221ETF18099DP4" ap="AP-01" eventtime=1760845106123456789 remotewtptime="3456.789012" tz="-0700" devid="FGT60E4Q16074290" vd="root" dtime="2025-10-18 21:18:26" itime_t=1760845106 devname="FW-01"
+```
+
+## Infrastructure Event - Channel Change (Radar Detection)
+```
+date=2025-10-18 time=21:18:16 id=7562945098765432109 itime="2025-10-18 23:18:16" logver=704062726 logid=0104043591 type="event" subtype="wireless" level="warning" action="radar-detected" msg="AP AP-01 radio 2 found radar pulse, change channel 60 ==> 48." logdesc="Radar detected, channel change required" sn="FP221ETF18099DP4" ap="AP-01" eventtime=1760845096987654321 remotewtptime="3446.123456" tz="-0700" devid="FGT60E4Q16074290" vd="root" dtime="2025-10-18 21:18:16" itime_t=1760845096 devname="FW-01"
+```
+
+## Client Leave WTP Event
+```
+date=2025-10-19 time=18:37:09 id=7563111978600759319 itime="2025-10-19 20:37:10" logver=704062726 logid=0104043582 type="event" subtype="wireless" level="notice" srcip=10.12.41.35 action="client-leave-wtp" msg="Client aa:bb:cc:dd:ee:ff leaves WTP." logdesc="Wireless client left WTP" sn="FP221ETF18099DP4" user="N/A" group="N/A" reason="Disassociated because excessive number of frames need to be acknowledged, but are not acknowledged due to AP transmissions and/or poor channel conditions" ssid="Corporate" ap="AP-01" vap="Corporate WiFi" security="WPA2 Personal" channel=11 signal=0 radioid=1 radioband="802.11n,g-only" stamac="aa:bb:cc:dd:ee:ff" encryption="AES" mpsk="N/A" eventtime=1760924229959028060 authserver="N/A" remotewtptime="4052.431515" tz="-0700" snr=0 devid="FGT60E4Q16074290" vd="root" dtime="2025-10-19 18:37:09" itime_t=1760924230 devname="FW-01"
+```
+
+## Normal Authentication Event (Not a Reboot)
+```
+date=2025-10-20 time=06:29:38 id=7563295584157696076 itime="2025-10-20 08:29:39" logver=704062726 logid=0104043573 type="event" subtype="wireless" level="notice" srcip=10.12.50.55 action="client-authentication" msg="Client aa:bb:cc:dd:ee:ff authenticated." logdesc="Wireless client authenticated" sn="FP221ETF18099DP4" user="N/A" group="N/A" reason="Reserved 0" ssid="Corporate" ap="AP-01" vap="Corporate WiFi" security="WPA2 Personal" channel=11 signal=-45 radioid=1 radioband="802.11n,g-only" stamac="aa:bb:cc:dd:ee:ff" encryption="AES" mpsk="N/A" eventtime=1760966978843719522 authserver="N/A" remotewtptime="1744.920582" tz="-0700" snr=50 devid="FGT60E4Q16074290" vd="root" dtime="2025-10-20 06:29:38" itime_t=1760966979 devname="FW-01"
+```
+
+## Key Fields for Analysis
+
+### Critical Fields
+- **date/time**: Event timestamp
+- **devname**: Device name (for filtering)
+- **ap**: Access Point name
+- **remotewtptime**: AP uptime in seconds (key for reboot detection)
+- **action**: Event type
+- **msg**: Event description
+
+### Reboot Detection Logic
+- **remotewtptime="0.0"**: Exact moment AP comes online
+- **remotewtptime < 30**: Recent reboot (Quick mode)
+- **remotewtptime < 10**: Recent reboot (Detailed mode)
+- **Exclude authentication events**: Filter out RADIUS, auth, OKC actions
+
+### Frame Failure Detection
+- **action="client-disconnected-by-wtp"**: Client disconnected by AP
+- **reason contains "excessive.*frames"**: Frame acknowledgment issues
+- **Indicates**: RF problems, interference, or hardware issues
+
+### Infrastructure Events
+- **Pattern matching**: power, hardware, reboot, controller, capwap, etc.
+- **Exclude**: Common DNS failures (non-existing domain)
+- **Focus on**: System-level events affecting AP operation
+
+## Usage with the Tool
+
+```powershell
+# Test with sample data
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "examples/sample-log-entries.txt"
+
+# Detailed analysis
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "examples/sample-log-entries.txt" -Mode Detailed
+
+# Filter specific AP
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "examples/sample-log-entries.txt" -DeviceName "FW-01"
+```

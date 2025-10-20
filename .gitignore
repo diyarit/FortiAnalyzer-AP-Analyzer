@@ -1,0 +1,57 @@
+# PowerShell
+*.ps1xml
+*.psd1
+*.psm1
+
+# Log files (don't commit actual log files)
+*.log
+logs/
+*.csv
+
+# Documentation and sample files (allow these)
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!LICENSE
+!*.md
+!examples/sample-log-entries.txt
+
+# Analysis reports
+AP_Analysis_Report_*.txt
+NetworkTraffic.csv
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Test files (but allow our examples)
+test-*.log
+debug-*.txt
+# Allow our sample files
+!examples/sample-*.txt
