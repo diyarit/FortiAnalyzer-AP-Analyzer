@@ -1,81 +1,72 @@
 # Project Structure
 
 ```
-fortianalyzer-ap-analyzer/
-├── 📄 FortiAnalyzer-AP-Analyzer.ps1    # Main analysis script (unified tool)
-├── 📖 README.md                         # Main project documentation
-├── 📋 CHANGELOG.md                      # Version history and changes
-├── 🤝 CONTRIBUTING.md                   # Contribution guidelines
-├── 📄 LICENSE                           # MIT License
-├── 🚫 .gitignore                        # Git ignore patterns
-├── 📁 .github/                          # GitHub templates and workflows
-│   └── 📁 ISSUE_TEMPLATE/
-│       ├── 🐛 bug_report.md             # Bug report template
-│       └── ✨ feature_request.md        # Feature request template
-├── 📁 examples/                         # Sample files and documentation
-│   └── 📄 sample-log-entries.txt        # Sample FortiAnalyzer log entries
-├── 📖 AP-Analyzer-Usage-Guide.md        # Detailed usage guide
-├── 📋 Quick-Reference.md                # Quick parameter reference
-└── 📄 PROJECT_STRUCTURE.md             # This file
+FortiAnalyzer-AP-Analyzer/
+├── src/
+│   └── FortiAnalyzer.Core.psm1          # Core module (parsing, events, analysis, export)
+├── FortiAnalyzer-AP-Analyzer.ps1        # CLI tool (v3.0)
+├── FortiAnalyzer-AP-Analyzer-GUI.ps1    # WPF GUI (v3.0 Enterprise)
+├── tests/
+│   └── FortiAnalyzer.Core.Tests.ps1     # 31 Pester tests
+├── examples/
+│   └── sample-log-entries.txt            # Sample FortiAnalyzer log entries
+├── docs/
+├── .github/
+├── README.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── PROJECT_STRUCTURE.md
+└── Quick-Reference.md
+```
 
-## File Descriptions
+## Core Files
 
-### Core Files
-- **FortiAnalyzer-AP-Analyzer.ps1**: The main PowerShell script that performs all analysis
-- **README.md**: Primary documentation with installation, usage, and examples
-- **LICENSE**: MIT license for open source distribution
+### `src/FortiAnalyzer.Core.psm1` (Shared Module)
+The centralized module used by both CLI and GUI. Contains:
+- **Compiled regex patterns** for high-performance parsing
+- **100+ event definitions** across 9 categories (System, HA, Hardware, Wireless, Switch, SD-WAN, VPN, Router, User)
+- **ConvertFrom-FortiLogLine** - Parse any FortiAnalyzer log line
+- **Get-FortiAnalysisResults** - Unified analysis with time/device/level filtering
+- **New-FortiRecommendation** - Actionable recommendations engine
+- **Export-FortiReport** - Multi-format export (Text, HTML, JSON, CSV)
+- **Write-FortiDashboard** - Console dashboard output
 
-### Documentation
-- **AP-Analyzer-Usage-Guide.md**: Comprehensive usage guide with advanced examples
-- **Quick-Reference.md**: Quick parameter reference and common use cases
-- **CHANGELOG.md**: Version history and upgrade notes
-- **CONTRIBUTING.md**: Guidelines for contributors
+### `FortiAnalyzer-AP-Analyzer.ps1` (CLI Tool)
+Full-featured command-line tool with:
+- `[CmdletBinding()]` with parameter validation
+- Pipeline input support (`ValueFromPipeline`)
+- `-Quiet` mode for automation
+- Time range and log level filtering
+- Customizable thresholds (`-RebootThreshold`, `-HighRFThreshold`)
 
-### Development
-- **PROJECT_STRUCTURE.md**: This file explaining the project layout
-- **.gitignore**: Excludes log files, reports, and temporary files from git
-- **.github/**: GitHub-specific templates and automation
+### `FortiAnalyzer-AP-Analyzer-GUI.ps1` (WPF GUI)
+Enterprise-grade WPF interface with:
+- 8 dashboard status cards (System, Switch, Wireless, RF, SD-WAN, Hardware, VPN, Router)
+- 8 event detail tabs
+- Time range and log level filter controls
+- Multi-format export (HTML/JSON/CSV/Text)
+- Keyboard shortcuts (F5, Ctrl+S, Escape)
 
-### Examples
-- **examples/sample-log-entries.txt**: Sample FortiAnalyzer log entries for testing
+### `tests/FortiAnalyzer.Core.Tests.ps1`
+31 Pester v3 tests covering:
+- Log line parsing (quoted/unquoted values, complex fields)
+- Event definition lookup
+- AP reboot detection (exact and heuristic)
+- Frame failure detection
+- Device and time filtering
+- Recommendation generation
+- Report export (JSON, CSV, HTML, Text)
 
-## Key Features by File
+## Key Improvements in v3.0
 
-### FortiAnalyzer-AP-Analyzer.ps1
-- ✅ Unified Quick and Detailed analysis modes
-- 🔍 Smart AP reboot detection using remotewtptime analysis
-- 📡 RF issue identification (frame failures)
-- 🏗️ Infrastructure event detection
-- 🎨 Color-coded output with severity levels
-- 📊 Automated report generation
-- ⚡ Performance optimized for large files
-
-### Documentation Coverage
-- 🚀 Quick start examples
-- 📖 Comprehensive parameter documentation
-- 🎯 Use case scenarios
-- 🔧 Troubleshooting guides
-- 🤝 Contribution guidelines
-- 📋 Issue templates
-
-## Usage Workflow
-
-1. **Quick Daily Check**: Use default Quick mode for monitoring
-2. **Incident Investigation**: Use Detailed mode for root cause analysis
-3. **Device-Specific Analysis**: Filter by device name for focused troubleshooting
-4. **Batch Processing**: Analyze multiple log files automatically
-5. **Report Generation**: Create detailed reports for documentation
-
-## Maintenance
-
-### Regular Updates
-- Update CHANGELOG.md for new versions
-- Keep README.md examples current
-- Review and update documentation
-- Test with new FortiAnalyzer versions
-
-### Quality Assurance
-- Test with various log formats
-- Verify cross-platform compatibility
-- Performance testing with large files
-- Documentation accuracy checks
+| Area | v2.x | v3.0 |
+|------|------|------|
+| **Architecture** | Monolithic scripts, duplicated logic | Shared Core module, single source of truth |
+| **Event Coverage** | 22 log IDs | 100+ log IDs across 9 categories |
+| **Performance** | Array += anti-pattern, recompiled regex | List<T>, compiled regex, streaming I/O |
+| **Export** | Plain text only | HTML, JSON, CSV, Text |
+| **Filtering** | Device name only | Device, time range, log level |
+| **Testing** | None | 31 Pester tests |
+| **Code Quality** | No CmdletBinding, non-standard verbs | CmdletBinding, approved verbs, validation |
+| **GUI** | 6 tabs, incomplete export | 8 tabs, complete export, keyboard shortcuts |

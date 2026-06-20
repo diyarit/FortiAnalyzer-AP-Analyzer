@@ -3,83 +3,174 @@
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)](https://github.com/PowerShell/PowerShell)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/PowerShell/PowerShell#get-powershell)
+[![Version](https://img.shields.io/badge/Version-3.1.0-blue.svg)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/Tests-31%20passing-brightgreen.svg)](tests/)
 
-A powerful PowerShell tool that analyzes FortiAnalyzer wireless logs to quickly identify when and why Access Points (APs) or switches go offline. Cut through thousands of log lines in seconds to find the root cause of network infrastructure issues.
+A powerful PowerShell tool that analyzes FortiAnalyzer logs to quickly identify when and why Access Points (APs), switches, or infrastructure components went offline. Supports **100+ event types** across system, HA, wireless, switch, SD-WAN, VPN, router, and user categories.
 
-## 🎯 What It Does
+## What It Does
 
-- **Detects AP Reboots**: Uses advanced `remotewtptime` analysis to identify when APs restart
-- **Identifies RF Issues**: Finds excessive frame failures and signal quality problems  
-- **Discovers Infrastructure Problems**: Locates controller, CAPWAP, and hardware issues
-- **Filters Noise**: Focuses on infrastructure events, not client connectivity issues
-- **Two Analysis Modes**: Quick daily monitoring or detailed investigation
-- **Smart Recommendations**: Provides actionable troubleshooting steps
+- **Detects AP Reboots**: Advanced `remotewtptime` heuristic analysis to identify when APs restart
+- **Identifies RF Issues**: Finds excessive frame failures and signal quality problems
+- **Discovers Infrastructure Problems**: Locates controller, CAPWAP, hardware, and HA issues
+- **Tracks VPN/SD-WAN**: Monitors tunnel status, SLA failures, and ISP link health
+- **Multiple Export Formats**: HTML (styled dark-theme dashboard), JSON, CSV, and text reports
+- **Time Range Filtering**: Analyze events within specific time windows
+- **Log Level Filtering**: Filter by severity (critical, warning, notice, etc.)
+- **Customizable Thresholds**: Adjust detection sensitivity for your environment
+- **Pipeline Support**: `-Quiet` mode returns structured objects for automation
 
-## 🚀 Quick Start
+## Quick Start
 
 ```powershell
-# Daily monitoring (30 seconds)
+# Daily monitoring (default Quick mode)
 .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "fortianalyzer-wireless.log"
 
-# Detailed investigation (1-2 minutes)  
+# Detailed investigation with HTML report
 .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "fortianalyzer-wireless.log" -Mode Detailed
 
-# Filter specific device
-.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "logs\" -DeviceName "AP-01" -Mode Detailed
+# Filter specific device with time range
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "logs\" -DeviceName "AP-01" -StartTime (Get-Date).AddDays(-7)
+
+# Export as JSON for automation
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "log.txt" -Mode Detailed -OutputFormat JSON -OutputPath report.json
+
+# Quiet mode for pipeline use
+$results = .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "log.txt" -Quiet
+$results.WirelessEvents | Where-Object { $_.Severity -eq 'Critical' }
+
+# Minimum severity filter
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "log.txt" -LogLevel warning -Mode Detailed
+
+# Custom thresholds
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "log.txt" -RebootThreshold 60 -HighRFThreshold 50
 ```
 
-## 📊 Sample Output
+## Parameters
 
-### Quick Mode (Default)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `LogPath` | String | *Required* | Path to log file or directory |
+| `Mode` | String | `Quick` | `Quick` (dashboard) or `Detailed` (full report) |
+| `DeviceName` | String | - | Filter to specific device hostname |
+| `StartTime` | DateTime | - | Only include events at or after this time |
+| `EndTime` | DateTime | - | Only include events at or before this time |
+| `LogLevel` | String | - | Minimum severity: emergency, alert, critical, error, warning, notice, information, debug |
+| `MaxEvents` | Int | `10` | Max events per category in Detailed mode |
+| `RebootThreshold` | Double | `30` | Max remotewtptime (seconds) to flag as reboot |
+| `HighRFThreshold` | Int | `20` | Frame failure count triggering HIGH RF warning |
+| `OutputFormat` | String | Auto | Export format: Text, HTML, JSON, CSV |
+| `OutputPath` | String | Auto | Report output path (auto-generated if omitted) |
+| `ShowAllEvents` | Switch | False | Show all events (not just top N) |
+| `Quiet` | Switch | False | Suppress console output, return pipeline objects |
+
+## Sample Output
+
+### Quick Mode (Dashboard)
 ```
-============================================================
-[RESULTS] AP STATUS SUMMARY
-============================================================
+======================================================================
+  FORTIANALYZER INFRASTRUCTURE DASHBOARD
+======================================================================
+  [SYS] System/HA:    CRITICAL (3 events)
+  [SWI] Switch:       HEALTHY (0 events)
+  [WLS] Wireless:     WARNING (5 events)
+  [SDW] SD-WAN:       HEALTHY (0 events)
+  [HWR] Hardware:     CRITICAL (1 events)
+  [VPN] VPN:          HEALTHY (0 events)
+  [RTR] Router:       HEALTHY (0 events)
+  [USR] User:         HEALTHY (0 events)
+  [RF ] RF Health:    WARNING (8 failures)
+======================================================================
 
-[REBOOTS] Detected AP Reboots: 0
-
-[RF ISSUES] Frame Failures: 29
-  - AP: AP-WL-AP01 - 29 failures
-
-[RECOMMENDATIONS]
-  [WARNING] High RF Issues: 29 frame failures detected.
-     - Check RF environment for interference
-     - Verify antenna connections and positioning
-     - Consider channel optimization
-     - Check AP hardware health
+  RECOMMENDATIONS
+----------------------------------------------------------------------
+    [Critical] SYSTEM CRASH: 1 watchdog reset(s) detected.
+    [Critical] HARDWARE: 1 fan/temperature alarm(s).
+    [Warning] RF QUALITY: 8 frame failure(s).
 ```
 
 ### Detailed Mode
+Full event breakdown per category with timestamps, severity, source, and message. Auto-generates an HTML report with:
+- Dark-themed dashboard with summary cards
+- Color-coded recommendations
+- Sortable event table (top 200)
+
+### GUI (Enterprise)
+- 8 dashboard status cards with real-time severity indicators
+- 8 event tabs: System/HA, Switch, Wireless, SD-WAN, VPN, Router, Frame Failures, Raw Logs
+- Time range and log level filter controls
+- Export to HTML/JSON/CSV/Text
+- Keyboard shortcuts: F5 (analyze), Ctrl+S (export), Escape (close)
+
+## Event Coverage (100+ Log IDs)
+
+| Category | Count | Key Events |
+|----------|-------|------------|
+| **System** | 22 | System started/shutdown/crash, conserve mode, disk low, interface down/up, NTP sync |
+| **HA** | 18 | Heartbeat lost/restored, failover success/failed, sync failed, monitor interface down, priority changed |
+| **Hardware** | 2 | Fan failure, temperature high (overheat) |
+| **Wireless** | 36 | AP joined/left/rebooted, CAPWAP tunnel down, radar detected, rogue AP, firmware upgrade failed, radio interference, DFS |
+| **Switch** | 21 | Switch online/offline, PoE error/budget exceeded, STP topology change, port security violation, VLAN changed, LLDP |
+| **SD-WAN** | 13 | SLA failed, member down/up, health check failed, virtual WAN link status |
+| **VPN** | 12 | IPsec tunnel up/down, SSL VPN login failed, Phase 1/2 established/failed |
+| **Router** | 9 | BGP/OSPF neighbor down, static route added/removed, DHCP lease, DNS query failed |
+| **User** | 10 | Login success/failed, user locked out, password expired, session timeout |
+
+## Architecture
+
 ```
-================================================================================
-[RESULTS] DETAILED ANALYSIS RESULTS
-================================================================================
-
-[REBOOT] AP REBOOT EVENTS (2)
-   [TIME] 2025-10-20 04:52:19
-   [DEVICE] Device: AP-WL-01, AP: AP-WL-AP01
-   [UPTIME] 1.703817s, Action: DNS-no-domain
-   [MSG] DNS lookup failed - indicates recent reboot
-
-[INFRA] INFRASTRUCTURE EVENTS (15)
-   [TIME] 2025-10-18 21:18:16
-   [DEVICE] Device: BSC-WL-01, Pattern: power
-   [MSG] AP AP-WL-AP01 radio 2 found radar pulse, change channel
-
-[RF] FRAME FAILURE EVENTS (29)
-   [AP] AP-WL-AP01: 29 failures
-   
-   [RECENT FAILURES]
-   - 2025-10-20 05:15:12: Client 66:a2:bb:c6:D4:4D
-   - 2025-10-20 04:26:57: Client e2:79:e9:94:6F:b4
+FortiAnalyzer-AP-Analyzer/
+├── src/
+│   └── FortiAnalyzer.Core.psm1        # Shared module (parsing, 100+ events, analysis, export)
+├── FortiAnalyzer-AP-Analyzer.ps1      # CLI tool (v3.1.0)
+├── FortiAnalyzer-AP-Analyzer-GUI.ps1  # WPF GUI (v3.1.0 Enterprise)
+├── tests/
+│   └── FortiAnalyzer.Core.Tests.ps1   # 31 Pester tests
+├── examples/
+│   └── sample-log-entries.txt          # Sample FortiAnalyzer log entries
+├── docs/
+├── .github/
+├── README.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+└── PROJECT_STRUCTURE.md
 ```
 
-## 🛠️ Installation
+### Core Module (`src/FortiAnalyzer.Core.psm1`)
+The shared engine used by both CLI and GUI. Contains:
+- **Compiled regex** for high-performance parsing (created once, reused per line)
+- **100+ event definitions** across 9 categories
+- `ConvertFrom-FortiLogLine` - Parse any FortiAnalyzer log line
+- `Get-FortiAnalysisResults` - Unified analysis with time/device/level filtering
+- `New-FortiRecommendation` - Actionable recommendations engine
+- `Export-FortiReport` - Multi-format export (Text, HTML, JSON, CSV)
+
+## Testing
+
+```powershell
+# Run all tests
+Invoke-Pester -Script ./tests/FortiAnalyzer.Core.Tests.ps1
+
+# Install Pester if needed
+Install-Module Pester -Force -SkipPublisherCheck
+```
+
+**31 tests** covering:
+- Log line parsing (quoted/unquoted values, complex fields)
+- Event definition lookup (100+ log IDs)
+- AP reboot detection (exact `remotewtptime=0.0` and heuristic low-uptime)
+- Frame failure detection
+- Device name filtering
+- Time range filtering
+- Recommendation generation (Critical, Warning, OK scenarios)
+- Report export (JSON, CSV, HTML, Text)
+
+## Installation
 
 ### Prerequisites
-- **PowerShell 5.1+** (Windows) or **PowerShell Core 6.0+** (Linux/macOS)
-- Access to FortiAnalyzer wireless event logs
-- Read permissions on log files
+- PowerShell 5.1+
+- Access to FortiAnalyzer wireless/system event logs
 
 ### Download
 ```bash
@@ -87,184 +178,62 @@ git clone https://github.com/diyarit/fortianalyzer-ap-analyzer.git
 cd fortianalyzer-ap-analyzer
 ```
 
-### PowerShell Execution Policy (Windows)
+### Execution Policy (Windows)
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
-## 📖 Usage
+## Integration Examples
 
-### Parameters
-
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `LogPath` | String | ✅ | - | Path to log file or directory |
-| `Mode` | String | ❌ | Quick | Analysis mode: `Quick` or `Detailed` |
-| `DeviceName` | String | ❌ | - | Filter to specific device (e.g., "AP-01") |
-| `ShowInfraEvents` | Switch | ❌ | False | Show infrastructure events in Quick mode |
-| `OutputPath` | String | ❌ | Auto | Custom report file path (Detailed mode) |
-| `MaxEvents` | Int | ❌ | 10 | Maximum events to display per category |
-
-### Examples
-
-#### Daily Monitoring
 ```powershell
-# Quick health check (recommended for daily use)
-.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "\\server\logs\wireless-today.log"
+# Daily scheduled task with email alerts
+$results = .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "\\server\logs\latest.log" -Quiet
+$critical = $results.SystemEvents | Where-Object { $_.Severity -eq 'Critical' }
+if ($critical) {
+    Send-MailMessage -To "noc@company.com" -Subject "FortiAnalyzer Alerts" -Body ($critical | Out-String)
+}
 
-# Include infrastructure events
-.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "wireless.log" -ShowInfraEvents
-```
-
-#### Incident Investigation
-```powershell
-# Deep analysis of specific AP
-.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "incident-logs\" -Mode Detailed -DeviceName "PROBLEM-AP"
-
-# Generate custom report
-.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "logs\" -Mode Detailed -OutputPath "C:\Reports\AP-Analysis.txt"
-```
-
-#### Batch Processing
-```powershell
-# Analyze multiple log files
+# Batch process multiple devices
 Get-ChildItem "C:\Logs\*.log" | ForEach-Object {
     Write-Host "Analyzing: $($_.Name)" -ForegroundColor Yellow
-    .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath $_.FullName
+    .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath $_.FullName -Mode Detailed
+}
+
+# Export HTML for web dashboard
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "logs\" -Mode Detailed -OutputFormat HTML -OutputPath "C:\WebRoot\report.html"
+
+# Analyze last 24 hours, critical events only
+.\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "logs\" -StartTime (Get-Date).AddDays(-1) -LogLevel critical -Mode Detailed
+
+# Compare reboot counts across devices
+$devices = @("FW-01", "FW-02", "FW-03")
+foreach ($dev in $devices) {
+    $r = .\FortiAnalyzer-AP-Analyzer.ps1 -LogPath "logs\" -DeviceName $dev -Quiet
+    $reboots = ($r.WirelessEvents | Where-Object { $_.Desc -match 'Reboot' }).Count
+    Write-Host "$dev : $reboots reboots" -ForegroundColor $(if ($reboots -gt 0) { 'Red' } else { 'Green' })
 }
 ```
 
-## 🔍 What It Detects
+## Version History
 
-### 🔄 AP Reboots
-- **Quick Mode**: Identifies reboots using 30-second uptime threshold
-- **Detailed Mode**: Precise analysis using `remotewtptime=0.0` and low uptime values
-- **Smart Filtering**: Excludes false positives from authentication events
+| Version | Date | Highlights |
+|---------|------|------------|
+| **3.1.0** | 2026-06-20 | Shared core module, 100+ events, multi-format export, time/level filtering, 31 Pester tests |
+| **3.0.0** | 2025-10-20 | WPF GUI, enterprise dashboard, expanded event coverage |
+| **2.0.0** | 2025-10-20 | Unified CLI tool, Quick/Detailed modes |
+| **1.0.0** | 2025-10-20 | Initial release |
 
-### 📡 RF Issues  
-- Excessive frame acknowledgment failures
-- Client disconnections due to poor RF conditions
-- Signal quality degradation
-- Channel interference problems
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
-### 🏗️ Infrastructure Events
-- Controller connectivity issues
-- CAPWAP tunnel problems
-- Hardware failures and power issues
-- WTP join/leave events
-- Radar detection and channel changes
+## License
 
-## 🎯 Mode Comparison
+MIT License - see [LICENSE](LICENSE) for details.
 
-| Feature | Quick Mode | Detailed Mode |
-|---------|------------|---------------|
-| **Analysis Time** | ~30 seconds | 1-2 minutes |
-| **AP Reboot Detection** | Basic (30s threshold) | Advanced (precise analysis) |
-| **Infrastructure Events** | Optional (`-ShowInfraEvents`) | Always included |
-| **Report Generation** | Console only | Console + File report |
-| **Event Details** | Summary view | Full event details |
-| **Best For** | Daily monitoring | Incident investigation |
+## Support
 
-## 🚨 Alert Levels
-
-| Level | Color | Meaning | Action Required |
-|-------|-------|---------|-----------------|
-| **[CRITICAL]** | 🔴 Red | AP reboots detected | Immediate investigation |
-| **[WARNING]** | 🟡 Yellow | High RF issues (>10 failures) | Monitor and plan fixes |
-| **[INFO]** | 🔵 Cyan | Moderate issues or events | Routine monitoring |
-| **[OK]** | 🟢 Green | No issues detected | Continue monitoring |
-
-## 📋 Log Format Support
-
-The tool supports FortiAnalyzer wireless event logs with these fields:
-- `date=` and `time=` - Event timestamp
-- `devname=` - Device name
-- `ap=` - Access Point name  
-- `remotewtptime=` - AP uptime (key for reboot detection)
-- `msg=` - Event message
-- `action=` - Event action type
-- `stamac=` - Client MAC address
-- `reason=` - Disconnection reason
-
-### Sample Log Entry
-```
-date=2025-10-20 time=04:52:19 devname="AP-WL-01" ap="AP-WL-AP01" 
-remotewtptime="1.703817" action="DNS-no-domain" 
-msg="DNS lookup of wpad.grenergy.local from client failed"
-```
-
-## ⚡ Performance
-
-- **Quick Mode**: Processes 30,000+ log lines in ~30 seconds
-- **Detailed Mode**: Processes 30,000+ log lines in 1-2 minutes  
-- **Memory Efficient**: Handles large files without excessive RAM usage
-- **Progress Tracking**: Visual feedback during processing
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| "Log path not found" | Verify file path and read permissions |
-| "No events detected" | Check log format or try different time period |
-| Slow performance | Use `-DeviceName` filter or Quick mode |
-| Missing AP names | Verify AP field is populated in logs |
-
-### Getting Help
-
-1. Check the [Issues](../../issues) page for known problems
-2. Review the [Usage Guide](AP-Analyzer-Usage-Guide.md) for detailed examples
-3. See [Quick Reference](Quick-Reference.md) for parameter details
-
-## 📁 Repository Structure
-
-```
-fortianalyzer-ap-analyzer/
-├── FortiAnalyzer-AP-Analyzer.ps1    # Main analysis script
-├── README.md                         # This file
-├── AP-Analyzer-Usage-Guide.md        # Detailed usage guide
-├── Quick-Reference.md                # Parameter quick reference
-├── LICENSE                           # MIT license
-└── examples/
-    └── sample-logs/                  # Sample log files for testing
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to help:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Guidelines
-- Follow PowerShell best practices
-- Add comments for complex logic
-- Test with various log formats
-- Update documentation for new features
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built for network administrators tired of manually parsing FortiAnalyzer logs
-- Inspired by real-world AP troubleshooting challenges
-- Tested with FortiAnalyzer wireless event logs from various environments
-
-## 📞 Support
-
-- 📖 **Documentation**: [Usage Guide](AP-Analyzer-Usage-Guide.md) | [Quick Reference](Quick-Reference.md)
-- 🐛 **Bug Reports**: [GitHub Issues](../../issues)
-- 💡 **Feature Requests**: [GitHub Issues](../../issues)
-- 📧 **Contact**: Create an issue for questions
+- [Usage Guide](AP-Analyzer-Usage-Guide.md) | [Quick Reference](Quick-Reference.md) | [Project Structure](PROJECT_STRUCTURE.md)
+- [GitHub Issues](../../issues) for bug reports and feature requests
 
 ---
 
-**Built by network engineers, for network engineers.** Save time, find root causes faster, and keep your wireless infrastructure running smoothly.
-
-⭐ **Star this repo** if it helped you solve AP offline issues!
+**Built by network engineers, for network engineers.**

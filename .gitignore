@@ -2,6 +2,7 @@
 *.ps1xml
 *.psd1
 *.psm1
+!src/FortiAnalyzer.Core.psm1
 
 # Log files (don't commit actual log files)
 *.log

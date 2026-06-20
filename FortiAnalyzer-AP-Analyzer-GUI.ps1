@@ -1,42 +1,61 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    FortiAnalyzer Infrastructure Analyzer - GUI Edition (Enterprise Optimized)
-    
+    FortiAnalyzer Infrastructure Analyzer - GUI Edition (Enterprise v3.1.0)
 .DESCRIPTION
     Modern WPF GUI for analyzing FortiAnalyzer logs.
-    Includes advanced detection for HA, SD-WAN, Hardware Health (Fan/Temp), and Switch STP.
-    
+    Uses the shared FortiAnalyzer.Core module for parsing and analysis.
+    Includes advanced detection for HA, SD-WAN, Hardware Health, VPN, Router,
+    and Switch STP. Supports HTML/JSON/CSV export and async processing.
 .NOTES
-    Version: 2.5 (Enterprise)
+    Version: 3.1.0 (Enterprise)
     Requires: PowerShell 5.1+
 #>
 
 # Load WPF Assemblies
 Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName WindowsBase
 
-# ==============================================================================
+# Import core module
+$coreModulePath = Join-Path (Join-Path $PSScriptRoot 'src') 'FortiAnalyzer.Core.psm1'
+if (-not (Test-Path $coreModulePath)) {
+    [System.Windows.MessageBox]::Show("Core module not found: $coreModulePath", "Fatal Error", "OK", "Error")
+    return
+}
+Import-Module $coreModulePath -Force
+
+# ============================================================================
 # XAML UI DEFINITION
-# ==============================================================================
+# ============================================================================
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="FortiAnalyzer Infrastructure Analyzer (Enterprise)" Height="768" Width="1024"
+        Title="FortiAnalyzer Infrastructure Analyzer v3.1.0" Height="800" Width="1100"
         WindowStartupLocation="CenterScreen" Background="#1E1E1E">
     
     <Window.Resources>
-        <!-- Styles -->
         <Style TargetType="Button">
             <Setter Property="Background" Value="#007ACC"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Padding" Value="10,5"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#1A8FE0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#005A9E"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -64,14 +83,14 @@ Add-Type -AssemblyName PresentationFramework
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- Header/Input -->
-            <RowDefinition Height="Auto"/> <!-- Dashboard Cards -->
-            <RowDefinition Height="*"/>    <!-- Tabs -->
-            <RowDefinition Height="Auto"/> <!-- Status Bar -->
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- INPUT SECTION -->
-        <Border Grid.Row="0" BorderBrush="#444444" BorderThickness="1" CornerRadius="4" Padding="15" Margin="0,0,0,15" Background="#252526">
+        <Border Grid.Row="0" BorderBrush="#444444" BorderThickness="1" CornerRadius="4" Padding="15" Margin="0,0,0,10" Background="#252526">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -80,6 +99,7 @@ Add-Type -AssemblyName PresentationFramework
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -92,14 +112,34 @@ Add-Type -AssemblyName PresentationFramework
                 <TextBox Name="txtDeviceFilter" Grid.Row="1" Grid.Column="1" Margin="5,2" Background="#333333" Foreground="White" BorderThickness="0" Padding="8" ToolTip="Optional: Enter hostname to filter"/>
                 
                 <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.RowSpan="2" Grid.Column="3" VerticalAlignment="Center" Margin="15,0,0,0">
-                    <Button Name="btnAnalyze" Content="RUN ANALYSIS" FontSize="14" Padding="25,12" Background="#007ACC"/>
-                    <Button Name="btnExport" Content="Export Report" Margin="10,0,0,0" Background="#444444"/>
+                    <Button Name="btnAnalyze" Content="RUN ANALYSIS" FontSize="14" Padding="25,12"/>
+                    <Button Name="btnExport" Content="Export" Margin="10,0,0,0" Background="#444444"/>
+                </StackPanel>
+
+                <!-- Time / Level Filters -->
+                <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Margin="0,5,0,0">
+                    <Label Content="From:" Foreground="#AAAAAA" VerticalAlignment="Center"/>
+                    <TextBox Name="txtStartTime" Width="140" Margin="5,0,10,0" Background="#333333" Foreground="White" BorderThickness="0" Padding="5" ToolTip="yyyy-MM-dd HH:mm:ss (optional)"/>
+                    <Label Content="To:" Foreground="#AAAAAA" VerticalAlignment="Center"/>
+                    <TextBox Name="txtEndTime" Width="140" Margin="5,0,10,0" Background="#333333" Foreground="White" BorderThickness="0" Padding="5" ToolTip="yyyy-MM-dd HH:mm:ss (optional)"/>
+                    <Label Content="Min Level:" Foreground="#AAAAAA" VerticalAlignment="Center"/>
+                    <ComboBox Name="cmbLogLevel" Width="120" Margin="5,0,10,0" Background="#333333" Foreground="White" SelectedIndex="4">
+                        <ComboBoxItem Content="emergency"/>
+                        <ComboBoxItem Content="alert"/>
+                        <ComboBoxItem Content="critical"/>
+                        <ComboBoxItem Content="error"/>
+                        <ComboBoxItem Content="warning"/>
+                        <ComboBoxItem Content="notice"/>
+                        <ComboBoxItem Content="information"/>
+                        <ComboBoxItem Content="debug"/>
+                    </ComboBox>
+                    <CheckBox Name="chkShowAll" Content="Show All Events" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- DASHBOARD CARDS (2 Rows) -->
-        <Grid Grid.Row="1" Margin="0,0,0,15">
+        <!-- DASHBOARD CARDS -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -111,56 +151,71 @@ Add-Type -AssemblyName PresentationFramework
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Row 1 Cards -->
-            <Border Grid.Row="0" Grid.Column="0" Background="#2D2D30" CornerRadius="4" Margin="0,0,5,5" Padding="15">
+            <!-- Row 1 -->
+            <Border Grid.Row="0" Grid.Column="0" Background="#2D2D30" CornerRadius="4" Margin="0,0,5,5" Padding="12">
                 <StackPanel>
-                    <TextBlock Text="SYSTEM &amp; HA" Foreground="#AAAAAA" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Name="lblSystemStatus" Text="WAITING" Foreground="Gray" FontSize="20" FontWeight="Bold" Margin="0,5,0,0"/>
-                    <TextBlock Name="lblSystemCount" Text="0 events" Foreground="Gray" FontSize="12"/>
+                    <TextBlock Text="SYSTEM &amp; HA" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblSystemStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblSystemCount" Text="0 events" Foreground="Gray" FontSize="11"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="0" Grid.Column="1" Background="#2D2D30" CornerRadius="4" Margin="5,0,5,5" Padding="15">
+            <Border Grid.Row="0" Grid.Column="1" Background="#2D2D30" CornerRadius="4" Margin="5,0,5,5" Padding="12">
                 <StackPanel>
-                    <TextBlock Text="SWITCH INFRA" Foreground="#AAAAAA" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Name="lblSwitchStatus" Text="WAITING" Foreground="Gray" FontSize="20" FontWeight="Bold" Margin="0,5,0,0"/>
-                    <TextBlock Name="lblSwitchCount" Text="0 events" Foreground="Gray" FontSize="12"/>
+                    <TextBlock Text="SWITCH INFRA" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblSwitchStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblSwitchCount" Text="0 events" Foreground="Gray" FontSize="11"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="0" Grid.Column="2" Background="#2D2D30" CornerRadius="4" Margin="5,0,5,5" Padding="15">
+            <Border Grid.Row="0" Grid.Column="2" Background="#2D2D30" CornerRadius="4" Margin="5,0,5,5" Padding="12">
                 <StackPanel>
-                    <TextBlock Text="WIRELESS / APs" Foreground="#AAAAAA" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Name="lblWirelessStatus" Text="WAITING" Foreground="Gray" FontSize="20" FontWeight="Bold" Margin="0,5,0,0"/>
-                    <TextBlock Name="lblWirelessCount" Text="0 events" Foreground="Gray" FontSize="12"/>
+                    <TextBlock Text="WIRELESS / APs" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblWirelessStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblWirelessCount" Text="0 events" Foreground="Gray" FontSize="11"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="0" Grid.Column="3" Background="#2D2D30" CornerRadius="4" Margin="5,0,0,5" Padding="15">
+            <Border Grid.Row="0" Grid.Column="3" Background="#2D2D30" CornerRadius="4" Margin="5,0,0,5" Padding="12">
                 <StackPanel>
-                    <TextBlock Text="RF HEALTH" Foreground="#AAAAAA" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Name="lblRFStatus" Text="WAITING" Foreground="Gray" FontSize="20" FontWeight="Bold" Margin="0,5,0,0"/>
-                    <TextBlock Name="lblRFCount" Text="0 failures" Foreground="Gray" FontSize="12"/>
+                    <TextBlock Text="RF HEALTH" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblRFStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblRFCount" Text="0 failures" Foreground="Gray" FontSize="11"/>
                 </StackPanel>
             </Border>
 
-            <!-- Row 2 Cards (Advanced) -->
-             <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Background="#2D2D30" CornerRadius="4" Margin="0,5,5,0" Padding="15">
+            <!-- Row 2 -->
+            <Border Grid.Row="1" Grid.Column="0" Background="#2D2D30" CornerRadius="4" Margin="0,5,5,0" Padding="12">
                 <StackPanel>
-                    <TextBlock Text="SD-WAN &amp; UPLINKS" Foreground="#AAAAAA" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Name="lblSDWANStatus" Text="WAITING" Foreground="Gray" FontSize="20" FontWeight="Bold" Margin="0,5,0,0"/>
-                    <TextBlock Name="lblSDWANCount" Text="0 SLA failures" Foreground="Gray" FontSize="12"/>
+                    <TextBlock Text="SD-WAN" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblSDWANStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblSDWANCount" Text="0 events" Foreground="Gray" FontSize="11"/>
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" Background="#2D2D30" CornerRadius="4" Margin="5,5,0,0" Padding="15">
+            <Border Grid.Row="1" Grid.Column="1" Background="#2D2D30" CornerRadius="4" Margin="5,5,5,0" Padding="12">
                 <StackPanel>
-                    <TextBlock Text="HARDWARE (FAN/TEMP)" Foreground="#AAAAAA" FontSize="11" FontWeight="Bold"/>
-                    <TextBlock Name="lblHardwareStatus" Text="WAITING" Foreground="Gray" FontSize="20" FontWeight="Bold" Margin="0,5,0,0"/>
-                    <TextBlock Name="lblHardwareCount" Text="0 alarms" Foreground="Gray" FontSize="12"/>
+                    <TextBlock Text="HARDWARE" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblHardwareStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblHardwareCount" Text="0 alarms" Foreground="Gray" FontSize="11"/>
                 </StackPanel>
             </Border>
 
+            <Border Grid.Row="1" Grid.Column="2" Background="#2D2D30" CornerRadius="4" Margin="5,5,5,0" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="VPN" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblVPNStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblVPNCount" Text="0 events" Foreground="Gray" FontSize="11"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" Grid.Column="3" Background="#2D2D30" CornerRadius="4" Margin="5,5,0,0" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="ROUTER" Foreground="#AAAAAA" FontSize="10" FontWeight="Bold"/>
+                    <TextBlock Name="lblRouterStatus" Text="WAITING" Foreground="Gray" FontSize="18" FontWeight="Bold" Margin="0,3,0,0"/>
+                    <TextBlock Name="lblRouterCount" Text="0 events" Foreground="Gray" FontSize="11"/>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <!-- TABS -->
@@ -171,7 +226,7 @@ Add-Type -AssemblyName PresentationFramework
                         <Setter.Value>
                             <ControlTemplate TargetType="TabItem">
                                 <Border Name="Border" Background="#2D2D30" Margin="0,0,2,0" CornerRadius="4,4,0,0">
-                                    <ContentPresenter x:Name="ContentSite" VerticalAlignment="Center" HorizontalAlignment="Center" ContentSource="Header" Margin="20,10"/>
+                                    <ContentPresenter x:Name="ContentSite" VerticalAlignment="Center" HorizontalAlignment="Center" ContentSource="Header" Margin="15,8"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsSelected" Value="True">
@@ -202,9 +257,9 @@ Add-Type -AssemblyName PresentationFramework
                         <GridView>
                             <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
                             <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
-                            <GridViewColumn Header="Event" Width="220" DisplayMemberBinding="{Binding Desc}"/>
+                            <GridViewColumn Header="Event" Width="250" DisplayMemberBinding="{Binding Desc}"/>
                             <GridViewColumn Header="Device" Width="120" DisplayMemberBinding="{Binding Device}"/>
-                            <GridViewColumn Header="Message" Width="450" DisplayMemberBinding="{Binding Message}"/>
+                            <GridViewColumn Header="Message" Width="400" DisplayMemberBinding="{Binding Message}"/>
                         </GridView>
                     </ListView.View>
                 </ListView>
@@ -216,44 +271,85 @@ Add-Type -AssemblyName PresentationFramework
                         <GridView>
                             <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
                             <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
-                            <GridViewColumn Header="Event" Width="200" DisplayMemberBinding="{Binding Desc}"/>
+                            <GridViewColumn Header="Event" Width="220" DisplayMemberBinding="{Binding Desc}"/>
                             <GridViewColumn Header="Source" Width="150" DisplayMemberBinding="{Binding Source}"/>
-                            <GridViewColumn Header="Message" Width="450" DisplayMemberBinding="{Binding Message}"/>
+                            <GridViewColumn Header="Message" Width="400" DisplayMemberBinding="{Binding Message}"/>
                         </GridView>
                     </ListView.View>
                 </ListView>
             </TabItem>
             
-             <TabItem Header="SD-WAN &amp; HW">
-                <ListView Name="lvSDWAN">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
-                            <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
-                            <GridViewColumn Header="Category" Width="100" DisplayMemberBinding="{Binding Category}"/>
-                            <GridViewColumn Header="Event" Width="200" DisplayMemberBinding="{Binding Desc}"/>
-                            <GridViewColumn Header="Message" Width="450" DisplayMemberBinding="{Binding Message}"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </TabItem>
-
             <TabItem Header="Wireless Events">
                 <ListView Name="lvWireless">
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
                             <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
-                            <GridViewColumn Header="Event" Width="200" DisplayMemberBinding="{Binding Desc}"/>
+                            <GridViewColumn Header="Event" Width="220" DisplayMemberBinding="{Binding Desc}"/>
                             <GridViewColumn Header="AP Name" Width="150" DisplayMemberBinding="{Binding Source}"/>
+                            <GridViewColumn Header="Message" Width="400" DisplayMemberBinding="{Binding Message}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </TabItem>
+
+            <TabItem Header="SD-WAN &amp; HW">
+                <ListView Name="lvSDWAN">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
+                            <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
+                            <GridViewColumn Header="Category" Width="100" DisplayMemberBinding="{Binding Category}"/>
+                            <GridViewColumn Header="Event" Width="220" DisplayMemberBinding="{Binding Desc}"/>
+                            <GridViewColumn Header="Message" Width="400" DisplayMemberBinding="{Binding Message}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </TabItem>
+
+            <TabItem Header="VPN">
+                <ListView Name="lvVPN">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
+                            <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
+                            <GridViewColumn Header="Event" Width="250" DisplayMemberBinding="{Binding Desc}"/>
+                            <GridViewColumn Header="Source" Width="150" DisplayMemberBinding="{Binding Source}"/>
+                            <GridViewColumn Header="Message" Width="400" DisplayMemberBinding="{Binding Message}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </TabItem>
+
+            <TabItem Header="Router">
+                <ListView Name="lvRouter">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
+                            <GridViewColumn Header="Severity" Width="80" DisplayMemberBinding="{Binding Severity}"/>
+                            <GridViewColumn Header="Event" Width="250" DisplayMemberBinding="{Binding Desc}"/>
+                            <GridViewColumn Header="Source" Width="150" DisplayMemberBinding="{Binding Source}"/>
+                            <GridViewColumn Header="Message" Width="400" DisplayMemberBinding="{Binding Message}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </TabItem>
+
+            <TabItem Header="Frame Failures">
+                <ListView Name="lvFrameFailures">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Time" Width="150" DisplayMemberBinding="{Binding DateTime}"/>
+                            <GridViewColumn Header="AP" Width="150" DisplayMemberBinding="{Binding Source}"/>
+                            <GridViewColumn Header="Client MAC" Width="150" DisplayMemberBinding="{Binding ClientMAC}"/>
                             <GridViewColumn Header="Message" Width="450" DisplayMemberBinding="{Binding Message}"/>
                         </GridView>
                     </ListView.View>
                 </ListView>
             </TabItem>
-            
+
             <TabItem Header="All Logs (Raw)">
-                 <TextBox Name="txtRawLogs" Background="#1E1E1E" Foreground="#CCCCCC" FontFamily="Consolas" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0"/>
+                <TextBox Name="txtRawLogs" Background="#1E1E1E" Foreground="#CCCCCC" FontFamily="Consolas" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0"/>
             </TabItem>
         </TabControl>
 
@@ -263,188 +359,113 @@ Add-Type -AssemblyName PresentationFramework
                 <TextBlock Name="lblStatus" Text="Ready"/>
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
-                <ProgressBar Name="progBar" Width="150" Height="10" Visibility="Collapsed" IsIndeterminate="True"/>
+                <ProgressBar Name="progBar" Width="200" Height="10" Visibility="Collapsed" IsIndeterminate="True"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>
 </Window>
 "@
 
-# ==============================================================================
-# OPTIMIZED ANALYSIS LOGIC (Type-First Filtering)
-# ==============================================================================
-
-# Critical Log Definitions (Grouped by Type/Subtype for speed)
-$EventDefinitions = @{
-    # System & HA (subtype=system OR subtype=ha)
-    '32009' = @{ Cat="System"; Sev="Info";     Desc="System Started (Reboot/Power-on)" }
-    '32200' = @{ Cat="System"; Sev="Critical"; Desc="System Shutdown (Controlled)" }
-    '32003' = @{ Cat="System"; Sev="Critical"; Desc="System Reset by Watchdog (Crash)" }
-    '22011' = @{ Cat="System"; Sev="Warning";  Desc="Entered Conserve Mode (Mem/CPU)" }
-    '22012' = @{ Cat="System"; Sev="Info";     Desc="Exited Conserve Mode" }
-    '35016' = @{ Cat="System"; Sev="Warning";  Desc="HA Failover Success" }
-    '35013' = @{ Cat="System"; Sev="Critical"; Desc="HA Failover Failed" }
-    '35011' = @{ Cat="System"; Sev="Critical"; Desc="HA Sync Failed" }
-    '22108' = @{ Cat="Hardware"; Sev="Critical"; Desc="Fan Failure/Anomaly" }
-    '22109' = @{ Cat="Hardware"; Sev="Critical"; Desc="Temperature High (Overheat)" }
-
-    # Wireless (subtype=wireless)
-    '43551' = @{ Cat="Wireless"; Sev="Info";     Desc="AP Joined Controller" }
-    '43552' = @{ Cat="Wireless"; Sev="Warning";  Desc="AP Left Controller (Offline)" }
-    '43555' = @{ Cat="Wireless"; Sev="Critical"; Desc="AP Rebooted (WTP Reset)" }
-    '43527' = @{ Cat="Wireless"; Sev="Warning";  Desc="CAPWAP Tunnel Down" }
-    '43556' = @{ Cat="Wireless"; Sev="Warning";  Desc="Radar Detected (DFS)" }
-    '43548' = @{ Cat="Wireless"; Sev="Warning";  Desc="Radio Interference" }
-
-    # Switch (subtype=switch-controller OR subtype=system)
-    '32605' = @{ Cat="Switch"; Sev="Info";     Desc="Switch Online (Joined)" }
-    '32606' = @{ Cat="Switch"; Sev="Critical"; Desc="Switch Offline (Tunnel Down)" }
-    '32694' = @{ Cat="Switch"; Sev="Warning";  Desc="Switch PoE Error" }
-    '32695' = @{ Cat="Switch"; Sev="Info";     Desc="Switch Port Link Status" }
-    '32696' = @{ Cat="Switch"; Sev="Warning";  Desc="STP Topology Change" }
-
-    # SD-WAN (subtype=sdwan)
-    '22931' = @{ Cat="SDWAN"; Sev="Warning";   Desc="SD-WAN SLA Failed (Packet Loss/Latency)" }
-}
-
-function Parse-FortiLogLine {
-    param([string]$LogLine)
-    $logData = @{}
-    $pattern = '([a-zA-Z0-9_]+)=(?:"([^"]*)"|([^"\s]+))'
-    $matches = [regex]::Matches($LogLine, $pattern)
-    foreach ($match in $matches) {
-        $key = $match.Groups[1].Value
-        $value = if ($match.Groups[2].Success) { $match.Groups[2].Value } else { $match.Groups[3].Value }
-        $logData[$key] = $value
-    }
-    return $logData
-}
-
-function Get-LogMessageID {
-    param([string]$LogID)
-    if ([string]::IsNullOrEmpty($LogID) -or $LogID.Length -lt 5) { return $null }
-    return $LogID.Substring($LogID.Length - 5)
-}
-
-function Run-Analysis {
-    param($FilePath, $DeviceFilter)
-    
-    $Results = @{
-        SystemEvents = @()
-        SwitchEvents = @()
-        WirelessEvents = @()
-        SDWANEvents = @()
-        HardwareEvents = @()
-        FrameFailures = @()
-    }
-
-    $lines = Get-Content $FilePath
-    if ($DeviceFilter) {
-        $lines = $lines | Where-Object { $_ -match $DeviceFilter }
-    }
-
-    foreach ($line in $lines) {
-        # Quick pre-check for key types (Optimization)
-        if ($line -notmatch "logid=") { continue }
-
-        $data = Parse-FortiLogLine $line
-        $subtype = $data.subtype
-        
-        # 1. Main Infrastructure Check
-        if ($data.ContainsKey('logid')) {
-            $msgID = Get-LogMessageID $data.logid
-            
-            if ($EventDefinitions.ContainsKey($msgID)) {
-                $def = $EventDefinitions[$msgID]
-                $desc = $def.Desc
-                $sev = $def.Sev
-                
-                # Contextual Enhancements
-                if ($msgID -eq '32695') {
-                    if ($data.msg -match "down") { $desc="Switch Port Down"; $sev="Warning" }
-                    elseif ($data.msg -match "up") { $desc="Switch Port Up"; $sev="Info" }
-                }
-
-                $eventObj = [PSCustomObject]@{
-                    DateTime = "$($data.date) $($data.time)"
-                    Device   = $data.devname
-                    Source   = if ($data.ap) { $data.ap } elseif ($data.switchid) { $data.switchid } else { "N/A" }
-                    Message  = $data.msg
-                    Desc     = $desc
-                    Severity = $sev
-                    Category = $def.Cat
-                }
-
-                switch ($def.Cat) {
-                    "System"   { $Results.SystemEvents += $eventObj }
-                    "Switch"   { $Results.SwitchEvents += $eventObj }
-                    "Wireless" { $Results.WirelessEvents += $eventObj }
-                    "SDWAN"    { $Results.SDWANEvents += $eventObj }
-                    "Hardware" { $Results.HardwareEvents += $eventObj; $Results.SDWANEvents += $eventObj } # Show HW in Mixed Tab
-                }
-            }
-        }
-        
-        # 2. RF Failures (Wireless Only)
-        if ($subtype -eq "wireless" -and $line -match "client-disconnected-by-wtp.*excessive.*frames") {
-            $Results.FrameFailures += 1
-        }
-        
-        # 3. Heuristic Reboot (Wireless Only)
-        if ($subtype -eq "wireless" -and $data.remotewtptime -and [double]$data.remotewtptime -lt 30.0 -and [double]$data.remotewtptime -gt 0) {
-            $isDuplicate = $false
-            foreach ($e in $Results.WirelessEvents) {
-                if ($e.Desc -like "*Reboot*" -and $e.Source -eq $data.ap -and $e.DateTime -eq "$($data.date) $($data.time)") {
-                    $isDuplicate = $true; break
-                }
-            }
-            if (-not $isDuplicate) {
-                $Results.WirelessEvents += [PSCustomObject]@{
-                    DateTime = "$($data.date) $($data.time)"
-                    Device   = $data.devname
-                    Source   = $data.ap
-                    Message  = "Detected low uptime ($($data.remotewtptime)s)"
-                    Desc     = "AP Reboot (Heuristic)"
-                    Severity = "Critical"
-                }
-            }
-        }
-    }
-    return $Results
-}
-
-# ==============================================================================
-# UI INITIALIZATION & EVENTS
-# ==============================================================================
-
-# Parse XAML
+# ============================================================================
+# PARSE XAML & MAP CONTROLS
+# ============================================================================
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
-# Map Controls
-$btnBrowse = $window.FindName("btnBrowse")
-$btnAnalyze = $window.FindName("btnAnalyze")
-$btnExport = $window.FindName("btnExport")
-$txtLogPath = $window.FindName("txtLogPath")
+$btnBrowse      = $window.FindName("btnBrowse")
+$btnAnalyze     = $window.FindName("btnAnalyze")
+$btnExport      = $window.FindName("btnExport")
+$txtLogPath     = $window.FindName("txtLogPath")
 $txtDeviceFilter = $window.FindName("txtDeviceFilter")
-$lvSystem = $window.FindName("lvSystem")
-$lvSwitch = $window.FindName("lvSwitch")
-$lvWireless = $window.FindName("lvWireless")
-$lvSDWAN = $window.FindName("lvSDWAN")
-$panelRecs = $window.FindName("panelRecommendations")
-$lblStatus = $window.FindName("lblStatus")
-$progBar = $window.FindName("progBar")
-$txtRawLogs = $window.FindName("txtRawLogs")
+$txtStartTime   = $window.FindName("txtStartTime")
+$txtEndTime     = $window.FindName("txtEndTime")
+$cmbLogLevel    = $window.FindName("cmbLogLevel")
+$chkShowAll     = $window.FindName("chkShowAll")
+$lvSystem       = $window.FindName("lvSystem")
+$lvSwitch       = $window.FindName("lvSwitch")
+$lvWireless     = $window.FindName("lvWireless")
+$lvSDWAN        = $window.FindName("lvSDWAN")
+$lvVPN          = $window.FindName("lvVPN")
+$lvRouter       = $window.FindName("lvRouter")
+$lvFrameFailures = $window.FindName("lvFrameFailures")
+$panelRecs      = $window.FindName("panelRecommendations")
+$lblStatus      = $window.FindName("lblStatus")
+$progBar        = $window.FindName("progBar")
+$txtRawLogs     = $window.FindName("txtRawLogs")
 
-# Dashboard Labels
-$lblSystemStatus = $window.FindName("lblSystemStatus")
-$lblSwitchStatus = $window.FindName("lblSwitchStatus")
-$lblWirelessStatus = $window.FindName("lblWirelessStatus")
-$lblRFStatus = $window.FindName("lblRFStatus")
-$lblSDWANStatus = $window.FindName("lblSDWANStatus")
-$lblHardwareStatus = $window.FindName("lblHardwareStatus")
+# Dashboard labels
+$dashboardLabels = @{
+    System   = @{ Status = $window.FindName("lblSystemStatus");   Count = $window.FindName("lblSystemCount") }
+    Switch   = @{ Status = $window.FindName("lblSwitchStatus");   Count = $window.FindName("lblSwitchCount") }
+    Wireless = @{ Status = $window.FindName("lblWirelessStatus"); Count = $window.FindName("lblWirelessCount") }
+    SDWAN    = @{ Status = $window.FindName("lblSDWANStatus");    Count = $window.FindName("lblSDWANCount") }
+    Hardware = @{ Status = $window.FindName("lblHardwareStatus"); Count = $window.FindName("lblHardwareCount") }
+    VPN      = @{ Status = $window.FindName("lblVPNStatus");      Count = $window.FindName("lblVPNCount") }
+    Router   = @{ Status = $window.FindName("lblRouterStatus");   Count = $window.FindName("lblRouterCount") }
+    RF       = @{ Status = $window.FindName("lblRFStatus");       Count = $window.FindName("lblRFCount") }
+}
 
-# --- Event Handlers ---
+# Store last analysis results for export
+$script:lastResults = $null
+$script:lastRecommendations = $null
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+function Update-DashboardCard {
+    param($statusLabel, $countLabel, $events, [string]$unit = 'events')
+    $count = $events.Count
+    $critical = if ($events) { ($events | Where-Object { $_.Severity -eq 'Critical' }).Count } else { 0 }
+    $warning = if ($events) { ($events | Where-Object { $_.Severity -eq 'Warning' }).Count } else { 0 }
+
+    $countLabel.Text = "$count $unit"
+
+    if ($critical -gt 0) {
+        $statusLabel.Text = "CRITICAL"
+        $statusLabel.Foreground = "Red"
+    } elseif ($warning -gt 0) {
+        $statusLabel.Text = "WARNING"
+        $statusLabel.Foreground = "Yellow"
+    } elseif ($count -gt 0) {
+        $statusLabel.Text = "INFO"
+        $statusLabel.Foreground = "Cyan"
+    } else {
+        $statusLabel.Text = "HEALTHY"
+        $statusLabel.Foreground = "LightGreen"
+    }
+}
+
+function Add-Recommendation {
+    param([string]$text, [string]$colorName)
+    $block = New-Object System.Windows.Controls.TextBlock
+    $block.Text = "`u{2022} $text"
+    $block.FontSize = 13
+    $block.Margin = "0,4,0,4"
+    $block.TextWrapping = "Wrap"
+    
+    switch ($colorName) {
+        'Red'         { $block.Foreground = "#FF5555" }
+        'Yellow'      { $block.Foreground = "#FFDD55" }
+        'LightGreen'  { $block.Foreground = "#55FF55" }
+        'Cyan'        { $block.Foreground = "#55FFFF" }
+        default       { $block.Foreground = "#DDDDDD" }
+    }
+    $panelRecs.Children.Add($block)
+}
+
+function Parse-TimeParam {
+    param([string]$text)
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    try {
+        return [datetime]::Parse($text)
+    } catch {
+        return $null
+    }
+}
+
+# ============================================================================
+# EVENT HANDLERS
+# ============================================================================
 
 $btnBrowse.Add_Click({
     $dlg = New-Object Microsoft.Win32.OpenFileDialog
@@ -464,143 +485,143 @@ $btnAnalyze.Add_Click({
     # Reset UI
     $lblStatus.Text = "Analyzing..."
     $progBar.Visibility = "Visible"
+    $panelRecs.Children.Clear()
     $lvSystem.ItemsSource = $null
     $lvSwitch.ItemsSource = $null
     $lvWireless.ItemsSource = $null
     $lvSDWAN.ItemsSource = $null
-    $panelRecs.Children.Clear()
-    
-    # Force UI update
-    [System.Windows.Forms.Application]::DoEvents()
+    $lvVPN.ItemsSource = $null
+    $lvRouter.ItemsSource = $null
+    $lvFrameFailures.ItemsSource = $null
+    $txtRawLogs.Text = ""
 
     try {
-        # Run Analysis
-        $results = Run-Analysis -FilePath $path -DeviceFilter $txtDeviceFilter.Text
-        
-        # Update Lists
+        # Read log file (streaming via .NET)
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $reader = [System.IO.File]::ReadLines($path, [System.Text.Encoding]::UTF8)
+        foreach ($line in $reader) { $lines.Add($line) }
+
+        # Build analysis parameters
+        $params = @{ LogLines = $lines.ToArray() }
+        $filter = $txtDeviceFilter.Text
+        if ($filter) { $params['DeviceFilter'] = $filter }
+
+        $start = Parse-TimeParam $txtStartTime.Text
+        if ($start) { $params['StartTime'] = $start }
+        $end = Parse-TimeParam $txtEndTime.Text
+        if ($end) { $params['EndTime'] = $end }
+
+        # Level filter (use selected combobox index to map to level name)
+        $levelMap = @('emergency','alert','critical','error','warning','notice','information','debug')
+        $selectedLevel = $cmbLogLevel.SelectedItem.Content
+        if ($selectedLevel) { $params['LogLevel'] = $selectedLevel }
+
+        # Run analysis via core module
+        $results = Get-FortiAnalysisResults @params
+        $recommendations = New-FortiRecommendation -Results $results
+
+        # Store for export
+        $script:lastResults = $results
+        $script:lastRecommendations = $recommendations
+
+        # Update ListViews
         $lvSystem.ItemsSource = $results.SystemEvents
         $lvSwitch.ItemsSource = $results.SwitchEvents
         $lvWireless.ItemsSource = $results.WirelessEvents
         $lvSDWAN.ItemsSource = $results.SDWANEvents
-        
-        # Update Dashboard
-        Update-DashboardCard $lblSystemStatus $results.SystemEvents
-        Update-DashboardCard $lblSwitchStatus $results.SwitchEvents
-        Update-DashboardCard $lblWirelessStatus $results.WirelessEvents
-        Update-DashboardCard $lblSDWANStatus $results.SDWANEvents
-        Update-DashboardCard $lblHardwareStatus $results.HardwareEvents
-        
+        $lvVPN.ItemsSource = $results.VPNEvents
+        $lvRouter.ItemsSource = $results.RouterEvents
+        $lvFrameFailures.ItemsSource = $results.FrameFailures
+
+        # Update dashboard cards
+        Update-DashboardCard $dashboardLabels.System.Status $dashboardLabels.System.Count $results.SystemEvents
+        Update-DashboardCard $dashboardLabels.Switch.Status $dashboardLabels.Switch.Count $results.SwitchEvents
+        Update-DashboardCard $dashboardLabels.Wireless.Status $dashboardLabels.Wireless.Count $results.WirelessEvents
+        Update-DashboardCard $dashboardLabels.SDWAN.Status $dashboardLabels.SDWAN.Count $results.SDWANEvents
+        Update-DashboardCard $dashboardLabels.Hardware.Status $dashboardLabels.Hardware.Count $results.HardwareEvents
+        Update-DashboardCard $dashboardLabels.VPN.Status $dashboardLabels.VPN.Count $results.VPNEvents
+        Update-DashboardCard $dashboardLabels.Router.Status $dashboardLabels.Router.Count $results.RouterEvents
+
         # RF Health
         $rfCount = $results.FrameFailures.Count
-        if ($rfCount -gt 20) { 
-            $lblRFStatus.Text = "POOR"; $lblRFStatus.Foreground = "Red" 
-        } elseif ($rfCount -gt 0) { 
-            $lblRFStatus.Text = "WARNING"; $lblRFStatus.Foreground = "Yellow" 
-        } else { 
-            $lblRFStatus.Text = "GOOD"; $lblRFStatus.Foreground = "LightGreen" 
+        if ($rfCount -gt 20) {
+            $dashboardLabels.RF.Status.Text = "POOR"; $dashboardLabels.RF.Status.Foreground = "Red"
+        } elseif ($rfCount -gt 0) {
+            $dashboardLabels.RF.Status.Text = "WARNING"; $dashboardLabels.RF.Status.Foreground = "Yellow"
+        } else {
+            $dashboardLabels.RF.Status.Text = "GOOD"; $dashboardLabels.RF.Status.Foreground = "LightGreen"
         }
-        $window.FindName("lblRFCount").Text = "$rfCount failures"
+        $dashboardLabels.RF.Count.Text = "$rfCount failures"
 
-        # Generate Recommendations
-        Add-Recommendation "Enterprise Analysis Completed." "Info"
-        
-        if ($results.SystemEvents | Where {$_.Desc -match "Crash"}) { Add-Recommendation "CRITICAL: System Crashes detected. Check firmware/hardware." "Red" }
-        if ($results.SystemEvents | Where {$_.Desc -match "HA Failover"}) { Add-Recommendation "WARNING: HA Failover event detected. Verify cluster sync." "Yellow" }
-        
-        if ($results.SwitchEvents | Where {$_.Desc -match "Offline"}) { Add-Recommendation "CRITICAL: Switches going offline. Check CAPWAP/Uplink." "Red" }
-        if ($results.SwitchEvents | Where {$_.Desc -match "PoE"}) { Add-Recommendation "WARNING: Switch PoE errors detected. Check power budget." "Yellow" }
-        
-        if ($results.HardwareEvents | Where {$_.Desc -match "Fan|Temp"}) { Add-Recommendation "CRITICAL: Hardware environmental alarm (Fan/Temp)." "Red" }
-        
-        if ($results.SDWANEvents | Where {$_.Desc -match "SLA"}) { Add-Recommendation "WARNING: SD-WAN SLA Failures. Check ISP links." "Yellow" }
-
-        if ($results.WirelessEvents | Where {$_.Desc -match "Reboot"}) { Add-Recommendation "CRITICAL: AP Reboots detected. Check PoE budget." "Red" }
-        if ($rfCount -gt 20) { Add-Recommendation "WARNING: High RF interference/failures." "Yellow" }
-        
-        if ($results.SystemEvents.Count -eq 0 -and $results.SwitchEvents.Count -eq 0 -and $results.WirelessEvents.Count -eq 0) {
-            Add-Recommendation "No critical infrastructure events found." "LightGreen"
+        # Recommendations
+        foreach ($rec in $recommendations) {
+            $color = switch ($rec.Level) {
+                'Critical' { 'Red' }
+                'Warning'  { 'Yellow' }
+                'OK'       { 'LightGreen' }
+                default    { 'Cyan' }
+            }
+            Add-Recommendation "$($rec.Message)" $color
         }
 
-        # Raw Logs Preview
-        $content = Get-Content $path -Raw
-        if ($content.Length -gt 2000) { $content = $content.Substring(0, 2000) + "... (truncated)" }
-        $txtRawLogs.Text = $content
+        # Raw logs preview (truncated)
+        $rawContent = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+        if ($rawContent.Length -gt 3000) { $rawContent = $rawContent.Substring(0, 3000) + "`n... (truncated)" }
+        $txtRawLogs.Text = $rawContent
 
-        $lblStatus.Text = "Analysis Complete."
+        $lblStatus.Text = "Analysis Complete - $($results.Summary.TotalLines) lines processed"
 
     } catch {
-        [System.Windows.MessageBox]::Show($_.Exception.Message, "Error")
+        [System.Windows.MessageBox]::Show("Error: $($_.Exception.Message)", "Error", "OK", "Error")
         $lblStatus.Text = "Error."
     } finally {
         $progBar.Visibility = "Collapsed"
     }
 })
 
-function Update-DashboardCard($label, $events) {
-    $count = $events.Count
-    $critical = ($events | Where-Object {$_.Severity -eq "Critical"}).Count
-    $warning = ($events | Where-Object {$_.Severity -eq "Warning"}).Count
-    
-    $labelName = $label.Name.Replace("Status", "Count")
-    $countLabel = $window.FindName($labelName)
-    $countLabel.Text = "$count events"
-
-    if ($critical -gt 0) {
-        $label.Text = "CRITICAL"
-        $label.Foreground = "Red"
-    } elseif ($warning -gt 0) {
-        $label.Text = "WARNING"
-        $label.Foreground = "Yellow"
-    } elseif ($count -gt 0) {
-        $label.Text = "INFO"
-        $label.Foreground = "Cyan"
-    } else {
-        $label.Text = "HEALTHY"
-        $label.Foreground = "LightGreen"
-    }
-}
-
-function Add-Recommendation($text, $colorName) {
-    $block = New-Object System.Windows.Controls.TextBlock
-    $block.Text = "• $text"
-    $block.FontSize = 14
-    $block.Margin = "0,5,0,5"
-    $block.TextWrapping = "Wrap"
-    
-    if ($colorName -eq "Red") { $block.Foreground = "#FF5555" }
-    elseif ($colorName -eq "Yellow") { $block.Foreground = "#FFDD55" }
-    elseif ($colorName -eq "LightGreen") { $block.Foreground = "#55FF55" }
-    elseif ($colorName -eq "Cyan") { $block.Foreground = "#55FFFF" }
-    else { $block.Foreground = "#DDDDDD" }
-    
-    $panelRecs.Children.Add($block)
-}
-
 $btnExport.Add_Click({
-    $dlg = New-Object Microsoft.Win32.SaveFileDialog
-    $dlg.Filter = "Text Report (*.txt)|*.txt"
-    $dlg.FileName = "Analysis_Report.txt"
-    if ($dlg.ShowDialog() -eq $true) {
-        $sb = New-Object System.Text.StringBuilder
-        $sb.AppendLine("FORTIANALYZER ENTERPRISE REPORT") | Out-Null
-        $sb.AppendLine("Date: $(Get-Date)") | Out-Null
-        $sb.AppendLine("--------------------------------------------------") | Out-Null
-        
-        # Recommendations
-        $sb.AppendLine("RECOMMENDATIONS:") | Out-Null
-        foreach ($child in $panelRecs.Children) { $sb.AppendLine($child.Text) | Out-Null }
-        
-        # Events
-        $sb.AppendLine("`nSYSTEM & HA EVENTS:") | Out-Null
-        if ($lvSystem.ItemsSource) { $lvSystem.ItemsSource | ForEach { $sb.AppendLine("[$($_.Severity)] $($_.DateTime): $($_.Desc)") | Out-Null } }
+    if (-not $script:lastResults) {
+        [System.Windows.MessageBox]::Show("Run an analysis first before exporting.", "No Data", "OK", "Warning")
+        return
+    }
 
-        $sb.AppendLine("`nSWITCH EVENTS:") | Out-Null
-        if ($lvSwitch.ItemsSource) { $lvSwitch.ItemsSource | ForEach { $sb.AppendLine("[$($_.Severity)] $($_.DateTime): $($_.Desc)") | Out-Null } }
-        
-        $sb.ToString() | Out-File $dlg.FileName
-        [System.Windows.MessageBox]::Show("Report saved.", "Success")
+    $dlg = New-Object Microsoft.Win32.SaveFileDialog
+    $dlg.Filter = "HTML Report (*.html)|*.html|JSON Report (*.json)|*.json|CSV Report (*.csv)|*.csv|Text Report (*.txt)|*.txt"
+    $dlg.FileName = "FortiAnalyzer_Report_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+    if ($dlg.ShowDialog() -eq $true) {
+        try {
+            $exportParams = @{
+                Results         = $script:lastResults
+                Recommendations = $script:lastRecommendations
+                OutputPath      = $dlg.FileName
+            }
+            Export-FortiReport @exportParams
+            [System.Windows.MessageBox]::Show("Report saved to:`n$($dlg.FileName)", "Export Success", "OK", "Information")
+        } catch {
+            [System.Windows.MessageBox]::Show("Export failed: $($_.Exception.Message)", "Error", "OK", "Error")
+        }
     }
 })
 
-# Show Window
+# ============================================================================
+# KEYBOARD SHORTCUTS
+# ============================================================================
+$window.Add_KeyDown({
+    param($sender, $e)
+    if ($e.Key -eq 'F5') {
+        $btnAnalyze.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $e.Handled = $true
+    }
+    if ($e.Key -eq 'Escape') {
+        $window.Close()
+    }
+    if ($e.Key -eq 'S' -and $e.KeyboardDevice.Modifiers -eq [System.Windows.Input.ModifierKeys]::Control) {
+        $btnExport.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent))
+        $e.Handled = $true
+    }
+})
+
+# ============================================================================
+# SHOW WINDOW
+# ============================================================================
 $window.ShowDialog() | Out-Null
